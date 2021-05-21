@@ -145,7 +145,9 @@ public abstract class RedissonBaseLock extends RedissonExpirable implements RLoc
                 if (threadId == null) {
                     return;
                 }
-                
+
+                //这里通过lua脚本检查redis中是否还有这个key
+                //如果有的话，将key的生存时间更新为30s，返回1，否则返回0
                 RFuture<Boolean> future = renewExpirationAsync(threadId);
                 future.onComplete((res, e) -> {
                     if (e != null) {
@@ -153,13 +155,15 @@ public abstract class RedissonBaseLock extends RedissonExpirable implements RLoc
                         EXPIRATION_RENEWAL_MAP.remove(getEntryName());
                         return;
                     }
-                    
+
+                    //返回1的话，lua中对应的是true，这里会继续调度任务，间隔时间为10s
                     if (res) {
                         // reschedule itself
                         renewExpiration();
                     }
                 });
             }
+            //每隔10s中会检查一次
         }, internalLockLeaseTime / 3, TimeUnit.MILLISECONDS);
         
         ee.setTimeout(task);
@@ -172,6 +176,7 @@ public abstract class RedissonBaseLock extends RedissonExpirable implements RLoc
             oldEntry.addThreadId(threadId);
         } else {
             entry.addThreadId(threadId);
+            //更新锁的时间
             renewExpiration();
         }
     }

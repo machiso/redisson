@@ -93,9 +93,12 @@ public class RedissonLock extends RedissonBaseLock {
     }
 
     private void lock(long leaseTime, TimeUnit unit, boolean interruptibly) throws InterruptedException {
+        //获取当前线程ID
         long threadId = Thread.currentThread().getId();
         Long ttl = tryAcquire(-1, leaseTime, unit, threadId);
+
         // lock acquired
+        //这里代表已经加锁成功，返回null，直接return即可
         if (ttl == null) {
             return;
         }
@@ -108,9 +111,11 @@ public class RedissonLock extends RedissonBaseLock {
         }
 
         try {
+            //如果没有加锁成功，会走到无限循环中，会不断的去尝试获取锁
             while (true) {
                 ttl = tryAcquire(-1, leaseTime, unit, threadId);
                 // lock acquired
+                //获取到锁的话，直接跳出循环
                 if (ttl == null) {
                     break;
                 }
@@ -171,9 +176,12 @@ public class RedissonLock extends RedissonBaseLock {
 
     private <T> RFuture<Long> tryAcquireAsync(long waitTime, long leaseTime, TimeUnit unit, long threadId) {
         RFuture<Long> ttlRemainingFuture;
+        //leaseTime = -1
         if (leaseTime != -1) {
             ttlRemainingFuture = tryLockInnerAsync(waitTime, leaseTime, unit, threadId, RedisCommands.EVAL_LONG);
         } else {
+            //代码会走到这里，lockWatchdogTimeout = 30s，看门狗的间隔时间
+            //尝试来获取锁，返回一个future对象，回调
             ttlRemainingFuture = tryLockInnerAsync(waitTime, internalLockLeaseTime,
                     TimeUnit.MILLISECONDS, threadId, RedisCommands.EVAL_LONG);
         }
@@ -183,10 +191,12 @@ public class RedissonLock extends RedissonBaseLock {
             }
 
             // lock acquired
+            //客户端获取锁成功
             if (ttlRemaining == null) {
                 if (leaseTime != -1) {
                     internalLockLeaseTime = unit.toMillis(leaseTime);
                 } else {
+                    //调度一个定时任务，看门狗
                     scheduleExpirationRenewal(threadId);
                 }
             }
@@ -199,6 +209,16 @@ public class RedissonLock extends RedissonBaseLock {
         return get(tryLockAsync());
     }
 
+    /**
+     * 通过lua脚本来尝试获取锁，这里可以保证原子性操作，同一时刻是能有一个客户端加锁成功
+     * @param waitTime
+     * @param leaseTime
+     * @param unit
+     * @param threadId
+     * @param command
+     * @param <T>
+     * @return
+     */
     <T> RFuture<T> tryLockInnerAsync(long waitTime, long leaseTime, TimeUnit unit, long threadId, RedisStrictCommand<T> command) {
         return evalWriteAsync(getRawName(), LongCodec.INSTANCE, command,
                 "if (redis.call('exists', KEYS[1]) == 0) then " +
