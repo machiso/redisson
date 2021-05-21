@@ -363,14 +363,17 @@ public class RedissonLock extends RedissonBaseLock {
 
     protected RFuture<Boolean> unlockInnerAsync(long threadId) {
         return evalWriteAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+                //如果对应的key不存在，返回nil
                 "if (redis.call('hexists', KEYS[1], ARGV[3]) == 0) then " +
                         "return nil;" +
                         "end; " +
                         "local counter = redis.call('hincrby', KEYS[1], ARGV[3], -1); " +
+                        //可重入解锁，如果减去1之后还是大于0，那么就返回0
                         "if (counter > 0) then " +
                         "redis.call('pexpire', KEYS[1], ARGV[2]); " +
                         "return 0; " +
                         "else " +
+                        //如果删除成功，返回1
                         "redis.call('del', KEYS[1]); " +
                         "redis.call('publish', KEYS[2], ARGV[1]); " +
                         "return 1; " +

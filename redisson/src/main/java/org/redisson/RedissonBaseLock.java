@@ -303,6 +303,7 @@ public abstract class RedissonBaseLock extends RedissonExpirable implements RLoc
     @Override
     public RFuture<Void> unlockAsync(long threadId) {
         RPromise<Void> result = new RedissonPromise<>();
+        //执行释放锁的逻辑代码
         RFuture<Boolean> future = unlockInnerAsync(threadId);
 
         future.onComplete((opStatus, e) -> {
@@ -320,6 +321,7 @@ public abstract class RedissonBaseLock extends RedissonExpirable implements RLoc
                 return;
             }
 
+            //释放锁成功，并且通知所有的listener
             result.trySuccess(null);
         });
 
